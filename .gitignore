@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+lake/
+spark-warehouse/
+metastore_db/
+derby.log
+test_out/
+*.tif
+*.parquet
+data_raw/
+.pytest_cache/
