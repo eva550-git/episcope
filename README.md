@@ -42,6 +42,8 @@ $env:SF = "0.25"
 
 The script serves the project at `http://localhost:8000/`. Running the complete pipeline requires the analytics and dashboard contributions to be present.
 
+If Spark reports `The system cannot find the path specified` during startup, check that `JAVA_HOME` points to Java 8, 11, or 17. The Windows script validates the configured version and falls back to the installed Java 8 JDK when available. Check the selected runtime without starting the pipeline with `.\run_pipeline.bat --check-java`.
+
 To set up manually:
 
 ```powershell
