@@ -1,0 +1,62 @@
+{
+  "generated_at_utc": "2026-10-24T10:16:47Z",
+  "host": {
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.10",
+    "cpu_count": 8,
+    "installed_memory_bytes": 8386629632,
+    "free_disk_bytes": 26865778688
+  },
+  "spark_version": "3.5.4",
+  "generated_fact_rows": 1000000,
+  "repeats_per_case_after_warmup": 3,
+  "optimisations": {
+    "broadcast_registry_join": {
+      "baseline_strategy": "sort-merge join with auto broadcast disabled",
+      "optimized_strategy": "explicit broadcast hash join of the small facility registry",
+      "baseline_seconds": [
+        0.13745620000008785,
+        0.11986539999998058,
+        0.13875740000003134
+      ],
+      "optimized_seconds": [
+        0.14943429999993896,
+        0.1137908000000607,
+        0.10082789999978559
+      ],
+      "baseline_median_seconds": 0.137456,
+      "optimized_median_seconds": 0.113791,
+      "speedup": 1.208,
+      "baseline_plan": "*(6) Sort [division#109 ASC NULLS FIRST], true, 0\n+- Exchange rangepartitioning(division#109 ASC NULLS FIRST, 4), ENSURE_REQUIREMENTS, [plan_id=128]\n   +- *(5) HashAggregate(keys=[division#109], functions=[sum(cases#4L)], output=[division#109, cases#188L])\n      +- Exchange hashpartitioning(division#109, 4), ENSURE_REQUIREMENTS, [plan_id=124]\n         +- *(4) HashAggregate(keys=[division#109], functions=[partial_sum(cases#4L)], output=[division#109, sum#279L])\n            +- *(4) Project [cases#4L, division#109]\n               +- *(4) SortMergeJoin [facility_id#2], [facility_id#108], Inner\n                  :- *(2) Sort [facility_id#2 ASC NULLS FIRST], false, 0\n                  :  +- Exchange hashpartitioning(facility_id#2, 4), ENSURE_REQUIREMENTS, [plan_id=111]\n                  :     +- *(1) Filter isnotnull(facility_id#2)\n                  :        +- InMemoryTableScan [facility_id#2, cases#4L], [isnotnull(facility_id#2)]\n                  :              +- InMemoryRelation [facility_id#2, epi_year#3L, cases#4L], StorageLevel(disk, memory, deserialized, 1 replicas)\n                  :                    +- *(1) Project [concat(F, lpad(cast(pmod(id#0L, 64) as string), 3, 0)) AS facility_id#2, (pmod(id#0L, 4) + 2022) AS epi_year#3L, pmod(id#0L, 51) AS cases#4L]\n                  :                       +- *(1) Range (0, 1000000, step=1, splits=2)\n                  +- *(3) Sort [facility_id#108 ASC NULLS FIRST], false, 0\n                     +- Exchange hashpartitioning(facility_id#108, 4), ENSURE_REQUIREMENTS, [plan_id=96]\n                        +- InMemoryTableScan [facility_id#108, division#109]\n                              +- InMemoryRelation [facility_id#108, division#109], StorageLevel(disk, memory, deserialized, 1 replicas)\n                                    +- *(1) Project [concat(F, lpad(cast(id#106L as string), 3, 0)) AS facility_id#108, concat(division-, cast(pmod(id#106L, 8) as string)) AS division#109]\n                                       +- *(1) Range (0, 64, step=1, splits=2)\n",
+      "optimized_plan": "*(3) Sort [division#109 ASC NULLS FIRST], true, 0\n+- Exchange rangepartitioning(division#109 ASC NULLS FIRST, 4), ENSURE_REQUIREMENTS, [plan_id=216]\n   +- *(2) HashAggregate(keys=[division#109], functions=[sum(cases#4L)], output=[division#109, cases#200L])\n      +- Exchange hashpartitioning(division#109, 4), ENSURE_REQUIREMENTS, [plan_id=212]\n         +- *(1) HashAggregate(keys=[division#109], functions=[partial_sum(cases#4L)], output=[division#109, sum#419L])\n            +- *(1) Project [cases#4L, division#109]\n               +- *(1) BroadcastHashJoin [facility_id#2], [facility_id#108], Inner, BuildRight, false\n                  :- *(1) Filter isnotnull(facility_id#2)\n                  :  +- InMemoryTableScan [facility_id#2, cases#4L], [isnotnull(facility_id#2)]\n                  :        +- InMemoryRelation [facility_id#2, epi_year#3L, cases#4L], StorageLevel(disk, memory, deserialized, 1 replicas)\n                  :              +- *(1) Project [concat(F, lpad(cast(pmod(id#0L, 64) as string), 3, 0)) AS facility_id#2, (pmod(id#0L, 4) + 2022) AS epi_year#3L, pmod(id#0L, 51) AS cases#4L]\n                  :                 +- *(1) Range (0, 1000000, step=1, splits=2)\n                  +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=195]\n                     +- InMemoryTableScan [facility_id#108, division#109]\n                           +- InMemoryRelation [facility_id#108, division#109], StorageLevel(disk, memory, deserialized, 1 replicas)\n                                 +- *(1) Project [concat(F, lpad(cast(id#106L as string), 3, 0)) AS facility_id#108, concat(division-, cast(pmod(id#106L, 8) as string)) AS division#109]\n                                    +- *(1) Range (0, 64, step=1, splits=2)\n"
+    },
+    "parquet_partition_pruning": {
+      "baseline_strategy": "filter a full, unpartitioned Parquet scan",
+      "optimized_strategy": "filter Parquet partitioned by epi_year",
+      "baseline_seconds": [
+        0.07428110000000743,
+        0.05767550000018673,
+        0.06307010000000446
+      ],
+      "optimized_seconds": [
+        0.06324440000025788,
+        0.0464787000000797,
+        0.0653135000002294
+      ],
+      "baseline_median_seconds": 0.06307,
+      "optimized_median_seconds": 0.063244,
+      "speedup": 0.997,
+      "baseline_plan": "*(2) HashAggregate(keys=[], functions=[sum(cases#601L)], output=[cases#607L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=303]\n   +- *(1) HashAggregate(keys=[], functions=[partial_sum(cases#601L)], output=[sum#626L])\n      +- *(1) Project [cases#601L]\n         +- *(1) Filter (isnotnull(epi_year#600L) AND (epi_year#600L = 2024))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [epi_year#600L,cases#601L] Batched: true, DataFilters: [isnotnull(epi_year#600L), (epi_year#600L = 2024)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<TEMP>/episcope-spark-optimisations-fb..., PartitionFilters: [], PushedFilters: [IsNotNull(epi_year), EqualTo(epi_year,2024)], ReadSchema: struct<epi_year:bigint,cases:bigint>\n",
+      "optimized_plan": "*(2) HashAggregate(keys=[], functions=[sum(cases#613L)], output=[cases#620L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=342]\n   +- *(1) HashAggregate(keys=[], functions=[partial_sum(cases#613L)], output=[sum#629L])\n      +- *(1) Project [cases#613L]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [cases#613L,epi_year#614] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<TEMP>/episcope-spark-optimisations-fb..., PartitionFilters: [isnotnull(epi_year#614), (epi_year#614 = 2024)], PushedFilters: [], ReadSchema: struct<cases:bigint>\n",
+      "output_bytes": {
+        "unpartitioned": 114610,
+        "partitioned": 90212
+      }
+    }
+  },
+  "spark_ui_screenshots_captured": false,
+  "limitations": [
+    "Synthetic microbenchmarks demonstrate these Spark operators; they are not full-pipeline timings.",
+    "Run on the assignment target hardware and capture Spark UI screenshots before claiming ENG-3 complete."
+  ]
+}

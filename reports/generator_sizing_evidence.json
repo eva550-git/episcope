@@ -1,0 +1,20 @@
+{
+  "validation_scope": "Synthetic encounter generation only; not a Spark pipeline benchmark",
+  "command": "python -m generator.generate_encounters --sf 1 --seed 42",
+  "scale_factor": 1,
+  "seed": 42,
+  "encounters_written": 26960544,
+  "required_minimum_encounters": 25000000,
+  "meets_generator_count_requirement": true,
+  "encounter_csv_files": 61,
+  "output_bytes": 2174928913,
+  "encounter_generation_seconds": 1279.68,
+  "total_generation_validation_seconds": 1294.42,
+  "isolation": "Generated in a temporary workspace; source data and project outputs were not overwritten.",
+  "not_validated": [
+    "Spark processing of the generated SF=1 encounters",
+    "SF=0.25 and SF=0.5 full-pipeline timings",
+    "SF=1 full-pipeline timing",
+    "Spark optimization comparisons"
+  ]
+}

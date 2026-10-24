@@ -1,10 +1,10 @@
 """Bronze layer: raw, immutable, append-only copy of every source plus ingestion metadata.
 
 Every record keeps its original text (all columns are strings, nothing is cleaned or cast) and gets
-  _source, _batch_id, _load_time, _file_name, _file_md5
+  _source, _batch_id, _load_time, _file_name, _file_sha256
 Bronze tables are Parquet, partitioned by _batch_id:  <lake>/bronze/<table>/_batch_id=<id>/
-Incremental and idempotent: a file whose (source, md5) is already in the ingest log is skipped, and
-a batch id is derived from the md5s of its files, so re-running a crashed load rewrites the same
+Incremental and idempotent: a file whose (source, SHA-256) is already in the ingest log is skipped,
+and a batch id is derived from the SHA-256 checksums of its files, so re-running a crashed load rewrites the same
 partition instead of duplicating rows.
 
 Sources are recognised from the file contents (header / keys), never from hard-coded file names.
@@ -41,8 +41,8 @@ DEFAULT_INPUTS = [
 LOG = LAKE / "_meta" / "ingest_log.jsonl"
 
 
-def md5_of(path, chunk=1 << 20):
-    h = hashlib.md5()
+def sha256_of(path, chunk=1 << 20):
+    h = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(chunk), b""):
             h.update(block)
@@ -110,17 +110,18 @@ def read_raw(spark, source, path):
 
 
 def ingest_source(spark, source, files, load_time):
-    """Write one batch for `source` containing the given [(path, md5)] files."""
-    md5s = sorted(m for _, m in files)
-    batch_id = f"{source}-{hashlib.sha1(''.join(md5s).encode()).hexdigest()[:10]}"
+    """Write one batch for `source` containing the given [(path, sha256)] files."""
+    checksums = sorted(checksum for _, checksum in files)
+    batch_hash = hashlib.sha256("".join(checksums).encode()).hexdigest()[:16]
+    batch_id = f"{source}-{batch_hash}"
     parts = []
-    for path, md5 in files:
+    for path, checksum in files:
         df = (read_raw(spark, source, path)
               .withColumn("_source", F.lit(source))
               .withColumn("_batch_id", F.lit(batch_id))
               .withColumn("_load_time", F.lit(load_time).cast("timestamp"))
               .withColumn("_file_name", F.lit(path.name))
-              .withColumn("_file_md5", F.lit(md5)))
+              .withColumn("_file_sha256", F.lit(checksum)))
         parts.append(df)
     df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), parts)
     out = LAKE / "bronze" / TABLES[source]
@@ -133,14 +134,14 @@ def ingest_source(spark, source, files, load_time):
 def copy_boundaries(files, load_time):
     """GeoJSON boundaries are kept as an untouched file copy (not tabular)."""
     out = []
-    for path, md5 in files:
-        batch_id = f"boundaries-{md5[:10]}"
+    for path, checksum in files:
+        batch_id = f"boundaries-{checksum[:16]}"
         dest = LAKE / "bronze" / "boundaries" / f"_batch_id={batch_id}"
         dest.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, dest / path.name)
         with open(path, encoding="utf-8") as f:
             n = len(json.load(f).get("features", []))
-        out.append({"source": "boundaries", "file_name": path.name, "file_md5": md5,
+        out.append({"source": "boundaries", "file_name": path.name, "file_sha256": checksum,
                     "batch_id": batch_id, "load_time": load_time, "rows": n})
     return out
 
@@ -153,7 +154,11 @@ def main():
 
     inputs = args.input if args.input else DEFAULT_INPUTS
     candidates = discover(inputs)
-    done = {(r["source"], r["file_md5"]) for r in read_log()}
+    done = {
+        (row["source"], row["file_sha256"])
+        for row in read_log()
+        if row.get("file_sha256")
+    }
     load_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     new, skipped, unknown = {}, 0, []
@@ -162,11 +167,11 @@ def main():
         if source is None:
             unknown.append(path.name)
             continue
-        md5 = md5_of(path)
-        if (source, md5) in done:
+        checksum = sha256_of(path)
+        if (source, checksum) in done:
             skipped += 1
             continue
-        new.setdefault(source, []).append((path, md5))
+        new.setdefault(source, []).append((path, checksum))
 
     print(f"found {len(candidates)} files: {sum(len(v) for v in new.values())} new, "
           f"{skipped} already ingested, {len(unknown)} not recognised")
@@ -187,8 +192,8 @@ def main():
         batch_id, per_file = ingest_source(spark, source, files, load_time)
         total = sum(per_file.values())
         print(f"  {source:11s} batch {batch_id}: {len(files)} files, {total:,} rows")
-        for path, md5 in files:
-            log_rows.append({"source": source, "file_name": path.name, "file_md5": md5,
+        for path, checksum in files:
+            log_rows.append({"source": source, "file_name": path.name, "file_sha256": checksum,
                              "batch_id": batch_id, "load_time": load_time,
                              "rows": per_file.get(path.name, 0)})
     append_log(log_rows)

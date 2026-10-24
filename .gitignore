@@ -11,3 +11,7 @@ test_out/
 *.parquet
 data_raw/
 .pytest_cache/
+pipeline/run_metrics.jsonl
+pipeline/gold/gold_weekly_cases.csv
+pipeline/quality/dq_report.*
+pipeline/quality/quarantined_records.csv
