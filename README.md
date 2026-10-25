@@ -7,7 +7,7 @@ EpiScope is a Big Data Analytics course project that demonstrates a synthetic di
 | Member | Student ID | Role |
 |---|---|---|
 | Eva Kalam | 0222220005101081 | Role 1 — Data Engineering |
-| Aklima Akther Naima | 0222220005101084 | Role 2 — Analytics |
+| Aklima Akter Naima | 0222220005101084 | Role 2 — Analytics |
 | Shreoshee Chowdhury Oma | 0222220005101086 | Role 3 — Visualization |
 
 ## Project status
