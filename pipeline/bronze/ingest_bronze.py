@@ -30,10 +30,13 @@ TABLES = {
     "facilities": "bronze_facilities",   # S5
     "weather": "bronze_weather",         # S3
     "population": "bronze_population",   # S2
+    "daily_counts": "bronze_daily_counts",  # generated analytics input
 }
 DEFAULT_INPUTS = [
     ROOT / "data_raw" / "landing",
     ROOT / "data_raw" / "synthetic" / "facility_registry.csv",
+    ROOT / "data_raw" / "synthetic" / "facility_stock_snapshot.csv",
+    ROOT / "data_raw" / "synthetic" / "true_daily_counts.csv",
     ROOT / "data_raw" / "weather_daily.csv",
     ROOT / "data_raw" / "population_by_district.csv",
     ROOT / "data_raw" / "districts.geojson",
@@ -63,6 +66,10 @@ def classify(path):
         cols = {c.strip().strip('"').lower() for c in first.split(",")}
         if {"encounter_id", "report_date"} <= cols:
             return "encounters"
+        if {"district_id", "disease", "date", "cases"} <= cols:
+            return "daily_counts"
+        if {"facility_id", "district_id", "snapshot_date", "beds_occupied"} <= cols:
+            return "stock"
         if {"facility_id", "beds"} <= cols:
             return "facilities"
         if "precip_mm" in cols:
@@ -103,7 +110,7 @@ def append_log(rows):
 
 
 def read_raw(spark, source, path):
-    if source == "stock":
+    if source == "stock" and path.suffix.lower() in {".json", ".jsonl"}:
         return spark.read.option("primitivesAsString", "true").json(uri(path))
     return (spark.read.option("header", "true").option("inferSchema", "false")
             .option("mode", "PERMISSIVE").csv(uri(path)))

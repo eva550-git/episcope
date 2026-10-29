@@ -19,6 +19,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT = ROOT / "data_raw" / "landing" / "encounters"
 DEFAULT_CLEAN = ROOT / "pipeline" / "silver" / "clean_encounters.parquet"
+DEFAULT_SPARK_CLEAN = ROOT / "pipeline" / "silver" / "clean_encounters_spark"
 DEFAULT_QUARANTINE = ROOT / "pipeline" / "quality" / "quarantined_records.csv"
 DEFAULT_REPORT = ROOT / "pipeline" / "quality" / "dq_report.json"
 DEFAULT_FACILITY_REGISTRY = ROOT / "data_raw" / "synthetic" / "facility_registry.csv"

@@ -98,9 +98,11 @@ def main() -> None:
             metrics,
         )
 
+    run_stage("stock_generation", "generator.generate_stock", [], metrics)
     run_stage("bronze_ingestion", "pipeline.bronze.ingest_bronze", [], metrics)
     run_stage("silver_quality", "pipeline.silver.clean_silver", [], metrics)
     run_stage("gold_aggregation", "pipeline.gold.create_gold_marts", [], metrics)
+    run_stage("analytics", "pipeline.analytics_runner", [], metrics)
     run_stage("dashboard_export", "serving.export_serving_data", [], metrics)
     metrics["completed_at"] = datetime.now(timezone.utc).isoformat()
     RUN_LOG.parent.mkdir(parents=True, exist_ok=True)

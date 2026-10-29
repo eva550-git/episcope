@@ -12,6 +12,7 @@ import pandas as pd
 
 from analytics.calendar.seasonal_calendar import seasonal_calendar
 from analytics.optimise.resource_allocator import optimize_resource_portfolio
+from generator.generate_stock import generate_stock_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "serving"
@@ -62,28 +63,11 @@ def _generate_stock_snapshot(
     snapshot_date: str,
 ) -> pd.DataFrame:
     """Create an explicitly synthetic stock snapshot when no S6 feed is supplied."""
-    facilities = pd.read_csv(facilities_path)
-    required = {"facility_id", "district_id", "beds"}
-    if not required.issubset(facilities.columns):
-        raise ValueError(f"Facility registry must contain {sorted(required)}.")
-
-    facilities["beds"] = pd.to_numeric(facilities["beds"], errors="raise").clip(lower=0)
-    rng = np.random.default_rng(2026)
-    beds = facilities["beds"].astype(int).to_numpy()
-    snapshot = facilities[["facility_id", "district_id"]].copy()
-    snapshot["snapshot_date"] = snapshot_date
-    snapshot["beds_occupied"] = np.minimum(
-        beds,
-        np.rint(beds * rng.uniform(0.45, 0.85, len(facilities))).astype(int),
+    return generate_stock_snapshot(
+        facilities_path=facilities_path,
+        output_path=stock_path,
+        snapshot_date=snapshot_date,
     )
-    snapshot["iv_saline"] = np.rint(beds * rng.uniform(0.8, 1.8, len(facilities))).astype(int)
-    snapshot["ns1_kits"] = np.rint(beds * rng.uniform(0.4, 1.2, len(facilities))).astype(int)
-    snapshot["ors"] = np.rint(beds * rng.uniform(1.0, 2.5, len(facilities))).astype(int)
-    snapshot["antimalarials"] = np.rint(beds * rng.uniform(0.15, 0.6, len(facilities))).astype(int)
-    snapshot["stock_source"] = "synthetic_planning_scenario"
-    stock_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot.to_csv(stock_path, index=False)
-    return snapshot
 
 
 def _read_stock_snapshot(
@@ -435,7 +419,14 @@ def export_dashboard_data(
     boundaries_geojson: str | Path | None = None,
     stock_csv: str | Path | None = None,
     dq_report_json: str | Path | None = None,
+    forecast_csv: str | Path | None = None,
+    alert_candidates_csv: str | Path | None = None,
+    detection_evaluation_json: str | Path | None = None,
+    forecast_evaluation_json: str | Path | None = None,
 ):
+    forecast_was_supplied = forecast_csv is not None
+    alerts_were_supplied = alert_candidates_csv is not None
+    use_default_analytics = output_dir is None
     gold_csv = Path(gold_csv) if gold_csv else ROOT / "pipeline" / "gold" / "gold_weekly_cases.csv"
     output_dir = Path(output_dir) if output_dir else OUT_DIR
     district_ref_csv = Path(district_ref_csv) if district_ref_csv else ROOT / "data_ref" / "district_ref.csv"
@@ -457,6 +448,89 @@ def export_dashboard_data(
     boundaries_geojson = (
         Path(boundaries_geojson) if boundaries_geojson else ROOT / "data_raw" / "districts.geojson"
     )
+    analytics_dir = (
+        ROOT / "pipeline" / "analytics"
+        if use_default_analytics
+        else output_dir / "analytics"
+    )
+    forecast_csv = (
+        Path(forecast_csv)
+        if forecast_csv is not None
+        else analytics_dir / "weekly_forecast.csv"
+    )
+    alert_candidates_csv = (
+        Path(alert_candidates_csv)
+        if alert_candidates_csv is not None
+        else analytics_dir / "alert_candidates.csv"
+    )
+    detection_evaluation_json = (
+        Path(detection_evaluation_json)
+        if detection_evaluation_json is not None
+        else analytics_dir / "detection_evaluation.json"
+    )
+    forecast_evaluation_json = (
+        Path(forecast_evaluation_json)
+        if forecast_evaluation_json is not None
+        else analytics_dir / "forecast_evaluation.json"
+    )
+    if not forecast_csv.is_file() and forecast_csv != analytics_dir / "weekly_forecast.csv":
+        raise FileNotFoundError(f"Forecast input not found: {forecast_csv}")
+    if forecast_was_supplied and not forecast_csv.is_file():
+        raise FileNotFoundError(f"Forecast input not found: {forecast_csv}")
+    if alerts_were_supplied and not alert_candidates_csv.is_file():
+        raise FileNotFoundError(f"Alert candidates not found: {alert_candidates_csv}")
+    model_forecasts = pd.read_csv(forecast_csv) if forecast_csv.is_file() else None
+    if model_forecasts is not None:
+        forecast_columns = {
+            "district_id",
+            "disease",
+            "origin_week",
+            "forecast_week",
+            "horizon",
+            "forecast_cases",
+            "lower_80",
+            "upper_80",
+        }
+        missing_forecast_columns = forecast_columns - set(model_forecasts.columns)
+        if missing_forecast_columns:
+            raise ValueError(
+                f"Forecast input is missing columns: {sorted(missing_forecast_columns)}"
+            )
+        model_forecasts["district_id"] = model_forecasts["district_id"].astype(str)
+        model_forecasts["disease"] = model_forecasts["disease"].astype(str).str.lower()
+        model_forecasts["origin_week"] = pd.to_datetime(
+            model_forecasts["origin_week"], errors="raise"
+        ).dt.normalize()
+        model_forecasts["forecast_week"] = pd.to_datetime(
+            model_forecasts["forecast_week"], errors="raise"
+        ).dt.normalize()
+        horizons = pd.to_numeric(model_forecasts["horizon"], errors="raise")
+        if not np.isfinite(horizons).all() or not (horizons == np.floor(horizons)).all():
+            raise ValueError("Forecast horizons must be finite integers.")
+        model_forecasts["horizon"] = horizons.astype(int)
+        for column in ("forecast_cases", "lower_80", "upper_80"):
+            model_forecasts[column] = pd.to_numeric(model_forecasts[column], errors="raise")
+        if not np.isfinite(
+            model_forecasts[["forecast_cases", "lower_80", "upper_80"]].to_numpy(dtype=float)
+        ).all():
+            raise ValueError("Forecast values and intervals must be finite.")
+        if model_forecasts.duplicated(["district_id", "disease", "horizon"]).any():
+            raise ValueError("Forecast input must have one row per district, disease, and horizon.")
+        if (model_forecasts[["forecast_cases", "lower_80", "upper_80"]] < 0).any().any():
+            raise ValueError("Forecast values and intervals cannot be negative.")
+        if (model_forecasts["lower_80"] > model_forecasts["forecast_cases"]).any() or (
+            model_forecasts["forecast_cases"] > model_forecasts["upper_80"]
+        ).any():
+            raise ValueError("Forecast intervals must contain their point forecasts.")
+        if not model_forecasts.groupby(["district_id", "disease"])["horizon"].apply(
+            lambda values: set(values) == set(range(1, FORECAST_HORIZON_WEEKS + 1))
+        ).all():
+            raise ValueError("Each forecast series must contain exactly horizons 1 through 4.")
+        expected_dates = model_forecasts["origin_week"] + pd.to_timedelta(
+            model_forecasts["horizon"] * 7, unit="D"
+        )
+        if not model_forecasts["forecast_week"].equals(expected_dates):
+            raise ValueError("Forecast weeks must match the origin week and horizon.")
     for input_path in (gold_csv, district_ref_csv, facility_registry_csv, boundaries_geojson):
         if not input_path.is_file():
             raise FileNotFoundError(f"Dashboard input not found: {input_path}")
@@ -513,6 +587,22 @@ def export_dashboard_data(
         ["district_id", "district", "division", "disease", "week_start"], as_index=False
     )["cases"].sum()
     weekly_with_ref = weekly_with_ref.sort_values("week_start")
+    if model_forecasts is not None:
+        expected_series = set(
+            weekly_with_ref[["district_id", "disease"]]
+            .astype({"district_id": str, "disease": str})
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        )
+        actual_series = set(
+            model_forecasts[["district_id", "disease"]]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        )
+        if expected_series != actual_series:
+            raise ValueError("Model forecasts must cover exactly the district/disease series in Gold.")
+        if not (model_forecasts["origin_week"] == latest_date).all():
+            raise ValueError("Model forecast origin does not match the latest Gold week.")
 
     district_weekly_records = []
     district_forecast = []
@@ -533,7 +623,27 @@ def export_dashboard_data(
                     "suppressed": 0 < round(cases) < SMALL_CELL_THRESHOLD,
                 }
             )
-        for item in _weekly_forecast(group, [], ()):
+        if model_forecasts is None:
+            forecast_items = _weekly_forecast(group, [], ())
+        else:
+            selected = model_forecasts.loc[
+                (model_forecasts["district_id"] == str(district_id))
+                & (model_forecasts["disease"] == disease)
+            ].sort_values("horizon")
+            if len(selected) != FORECAST_HORIZON_WEEKS:
+                raise ValueError(
+                    f"Model forecast is missing horizons for {district_id}/{disease}."
+                )
+            forecast_items = [
+                {
+                    "week_start": row.forecast_week.date().isoformat(),
+                    "forecast_cases": float(row.forecast_cases),
+                    "lower_80": float(row.lower_80),
+                    "upper_80": float(row.upper_80),
+                }
+                for row in selected.itertuples(index=False)
+            ]
+        for item in forecast_items:
             estimate = item["forecast_cases"]
             lower = item["lower_80"]
             upper = item["upper_80"]
@@ -641,7 +751,64 @@ def export_dashboard_data(
     latest_district.loc[latest_district["suppressed"], "incidence_per_100k"] = None
     latest_district["week_start"] = latest_date.date().isoformat()
 
-    alert_candidates = _build_alerts(weekly_with_ref)
+    if alert_candidates_csv.is_file():
+        alert_frame = pd.read_csv(alert_candidates_csv)
+        alert_columns = {
+            "district_id",
+            "district",
+            "division",
+            "disease",
+            "recent_cases_per_week",
+            "baseline_cases_per_week",
+            "growth_pct",
+            "z_score",
+            "recent_cases",
+            "latest_week",
+        }
+        missing_alert_columns = alert_columns - set(alert_frame.columns)
+        if missing_alert_columns:
+            raise ValueError(
+                f"Alert candidates are missing columns: {sorted(missing_alert_columns)}"
+            )
+        alert_frame["recent_cases"] = pd.to_numeric(
+            alert_frame["recent_cases"], errors="raise"
+        )
+        if (alert_frame["recent_cases"] < SMALL_CELL_THRESHOLD).any():
+            raise ValueError("Alert candidate counts below the small-cell threshold cannot be published.")
+        for column in (
+            "recent_cases_per_week",
+            "baseline_cases_per_week",
+            "growth_pct",
+            "z_score",
+        ):
+            alert_frame[column] = pd.to_numeric(alert_frame[column], errors="raise")
+        if not np.isfinite(
+            alert_frame[
+                [
+                    "recent_cases",
+                    "recent_cases_per_week",
+                    "baseline_cases_per_week",
+                    "growth_pct",
+                    "z_score",
+                ]
+            ].to_numpy(dtype=float)
+        ).all():
+            raise ValueError("Alert candidate metrics must be finite.")
+        alert_frame["district_id"] = alert_frame["district_id"].astype(str)
+        alert_frame["disease"] = alert_frame["disease"].astype(str).str.lower()
+        alert_candidates = _records(alert_frame)
+    else:
+        alert_candidates = _build_alerts(weekly_with_ref)
+    detection_evaluation = (
+        json.loads(detection_evaluation_json.read_text(encoding="utf-8"))
+        if detection_evaluation_json.is_file()
+        else None
+    )
+    forecast_evaluation = (
+        json.loads(forecast_evaluation_json.read_text(encoding="utf-8"))
+        if forecast_evaluation_json.is_file()
+        else None
+    )
     if dq_report_json.is_file():
         dq_report = json.loads(dq_report_json.read_text(encoding="utf-8"))
         required_report_fields = {"generated_at_utc", "rows_in", "rows_out", "rows_quarantined", "rules"}
@@ -704,6 +871,8 @@ def export_dashboard_data(
         "seasonality": _records(seasonality),
         "preparedness_calendar": preparedness_records,
         "data_quality_report": dq_report_payload,
+        "detection_evaluation": detection_evaluation,
+        "forecast_evaluation": forecast_evaluation,
         "alert_candidates": alert_candidates,
         "alerts": [
             candidate
@@ -716,8 +885,18 @@ def export_dashboard_data(
         "resource_labels": RESOURCE_LABELS,
         "assumptions": {
             "forecast_horizon_weeks": FORECAST_HORIZON_WEEKS,
-            "forecast_method": "District-level mean of the latest four weekly counts; interval uses the prior eight-week standard deviation. This is a heuristic baseline, not a validated forecast model.",
-            "alert_rule": "Recent four-week mean is at least 50% above the preceding eight-week mean and exceeds the selected baseline standard-deviation threshold.",
+            "forecast_method": (
+                "Spark ridge model using four lagged weekly case and weather observations; "
+                "empirical training-residual intervals. See forecast_evaluation for measured backtest results."
+                if model_forecasts is not None
+                else "District-level mean of the latest four weekly counts; interval uses the prior eight-week standard deviation. This is a heuristic baseline, not a validated forecast model."
+            ),
+            "forecast_model_enabled": model_forecasts is not None,
+            "alert_rule": (
+                "EARS C1 scores daily cases against the preceding 28 calendar days; dashboard candidates must meet the selected score threshold and show at least 50% growth in the recent 28-day daily mean. Counts below 5 are suppressed."
+                if alert_candidates_csv.is_file()
+                else "Recent four-week mean is at least 50% above the preceding eight-week mean and exceeds the selected baseline standard-deviation threshold."
+            ),
             "admission_rate": ADMISSION_RATE,
             "average_stay_days": AVERAGE_STAY_DAYS,
             "test_kits_per_forecast_case": TEST_KITS_PER_CASE,

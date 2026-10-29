@@ -56,7 +56,7 @@ def _output_sizes(lake: Path) -> dict[str, int]:
         "generated_inputs": _directory_bytes(ROOT / "data_raw" / "synthetic"),
         "encounters": _directory_bytes(ROOT / "data_raw" / "landing" / "encounters"),
         "bronze": _directory_bytes(lake / "bronze"),
-        "silver": total((ROOT / "pipeline" / "silver" / "clean_encounters.parquet",)),
+        "silver": total((ROOT / "pipeline" / "silver" / "clean_encounters_spark",)),
         "gold": total((ROOT / "pipeline" / "gold" / "gold_weekly_cases.csv",)),
         "quality": total(
             (

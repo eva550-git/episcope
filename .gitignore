@@ -1,4 +1,5 @@
 .venv/
+.venv311/
 __pycache__/
 *.pyc
 .env
@@ -12,6 +13,8 @@ test_out/
 data_raw/
 .pytest_cache/
 pipeline/run_metrics.jsonl
+pipeline/analytics/*.csv
+pipeline/analytics/*.json
 pipeline/gold/gold_weekly_cases.csv
 pipeline/quality/dq_report.*
 pipeline/quality/quarantined_records.csv

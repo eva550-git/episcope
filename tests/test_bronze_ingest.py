@@ -16,9 +16,15 @@ def test_classifies_inputs_by_content_not_filename(tmp_path):
     encounter.write_text("encounter_id,report_date\nE1,2025-01-01\n", encoding="utf-8")
     stock = tmp_path / "snapshot.json"
     stock.write_text(json.dumps({"snapshot_date": "2025-01-01"}), encoding="utf-8")
+    daily_counts = tmp_path / "counts.csv"
+    daily_counts.write_text(
+        "district_id,disease,date,cases\nBD1004,dengue,2025-01-01,3\n",
+        encoding="utf-8",
+    )
 
     assert classify(encounter) == "encounters"
     assert classify(stock) == "stock"
+    assert classify(daily_counts) == "daily_counts"
 
 
 def test_discovery_excludes_ground_truth_files(tmp_path):
