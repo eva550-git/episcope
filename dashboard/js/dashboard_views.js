@@ -842,20 +842,6 @@
       if (!data.district_weekly?.length || !data.allocation_scenarios?.length) {
         throw new Error('Exported data is missing district history or optimized allocation scenarios.');
       }
-      const forecastNote = document.querySelector('#trend-heading').parentElement.querySelector('p');
-      const forecastMetrics = data.forecast_evaluation?.metrics_by_horizon;
-      if (data.assumptions.forecast_model_enabled && forecastMetrics?.length) {
-        const coverage = forecastMetrics
-          .map(row => `${row.horizon}w ${fmt1(Number(row.coverage_80) * 100)}%`)
-          .join(' · ');
-        forecastNote.textContent =
-          `Four-week Spark model forecast · rolling-origin 80% interval coverage: ${coverage} · ` +
-          'not an operational prediction · drag the brush to link a time range';
-      } else if (data.assumptions.forecast_model_enabled) {
-        forecastNote.textContent =
-          'Four-week Spark model forecast · empirical 80% intervals · ' +
-          'not an operational prediction · drag the brush to link a time range';
-      }
       wireControls();
       updateFreshness();
       setStatus(
