@@ -6,9 +6,9 @@ EpiScope is a Bangladesh-focused disease surveillance and preparedness planning 
 
 | Member | Student ID | Role |
 |---|---|---|
-| Eva Kalam | 0222220005101081 | Data Engineering |
-| Aklima Akter Naima | 0222220005101084 | Analytics |
-| Shreoshee Chowdhury Oma | 0222220005101086 | Visualization |
+| Eva Kalam | 0222220005101081 | Data Engineer|
+| Aklima Akter Naima | 0222220005101084 | Analytics Engineer |
+| Shreoshee Chowdhury Oma | 0222220005101086 | Visualization Engineer |
 
 ## What the project does
 
