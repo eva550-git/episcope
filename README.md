@@ -1,5 +1,7 @@
 # EpiScope
 
+**Video presentation:** [EpiScope video on Google Drive](https://drive.google.com/file/d/1osJj8d93z-F6UhJZgjsqxqTRykccD7l2/view?usp=drive_link) · **Report (PDF):** [docs/EpiScope_report.pdf](docs/EpiScope_report.pdf) · **Proposal:** [docs/proposal.md](docs/proposal.md) · **Risk log:** [docs/risk_log.md](docs/risk_log.md) · **AI usage:** [AI_USAGE.md](AI_USAGE.md)
+
 EpiScope is a Bangladesh-focused disease surveillance and preparedness planning project. It brings synthetic health data through a Spark data pipeline, applies outbreak and forecasting analytics, and presents the results in an interactive D3 dashboard. It is built for learning and demonstration; it is not a clinical or operational decision-making system.
 
 ## Project team
